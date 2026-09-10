@@ -2,3 +2,4 @@
 - build `v1.3.11-beta2` 
 - build `v1.3.13-beta1`
 - build `v1.3.18.5` (private Windows x64)
+- rebuild `v1.3.18.5` after enabling Actions
