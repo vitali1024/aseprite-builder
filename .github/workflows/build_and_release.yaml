@@ -134,9 +134,11 @@ jobs:
             Remove-Item -Recurse -Force
 
           # Fail in CI if the packaged executable still has a missing runtime dependency.
-          & .\aseprite.exe --version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Packaged Aseprite failed runtime validation ($LASTEXITCODE)"
+          # Aseprite is a GUI-subsystem executable, so PowerShell's direct invocation
+          # does not reliably populate $LASTEXITCODE even when --version succeeds.
+          $probe = Start-Process -FilePath '.\aseprite.exe' -ArgumentList '--version' -Wait -PassThru -NoNewWindow
+          if ($probe.ExitCode -ne 0) {
+            throw "Packaged Aseprite failed runtime validation ($($probe.ExitCode))"
           }
 
           $asset = "Aseprite-$env:ASEPRITE_TAG-Windows-x64.zip"
