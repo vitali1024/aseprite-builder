@@ -98,13 +98,49 @@ jobs:
         run: |
           Set-Content -Path aseprite.ini -Value '# This file is here so Aseprite behaves as a portable program'
 
+          # Aseprite links against the OpenSSL runtime available on windows-latest.
+          # Copy those runtime DLLs beside aseprite.exe so the ZIP is actually portable.
+          $opensslRoot = Join-Path $env:ProgramFiles 'OpenSSL'
+          $runtimeDlls = @(
+            'libcrypto-3-x64.dll',
+            'libssl-3-x64.dll'
+          )
+
+          foreach ($dll in $runtimeDlls) {
+            $source = Join-Path $opensslRoot "bin\$dll"
+            if (-not (Test-Path $source)) {
+              $match = Get-ChildItem -Path $opensslRoot -Filter $dll -File -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+              if ($match) {
+                $source = $match.FullName
+              }
+            }
+
+            if (Test-Path $source) {
+              Copy-Item $source . -Force
+            }
+          }
+
+          if (-not (Test-Path '.\libcrypto-3-x64.dll')) {
+            throw 'Required OpenSSL runtime libcrypto-3-x64.dll was not found'
+          }
+
+          # Preserve Aseprite, its data, portable marker, and all runtime DLLs.
           $keep = @('aseprite.exe', 'aseprite.ini', 'data')
           Get-ChildItem -Force |
-            Where-Object { $keep -notcontains $_.Name } |
+            Where-Object {
+              $keep -notcontains $_.Name -and $_.Extension -ne '.dll'
+            } |
             Remove-Item -Recurse -Force
 
+          # Fail in CI if the packaged executable still has a missing runtime dependency.
+          & .\aseprite.exe --version
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged Aseprite failed runtime validation ($LASTEXITCODE)"
+          }
+
           $asset = "Aseprite-$env:ASEPRITE_TAG-Windows-x64.zip"
-          7z a -tzip $asset aseprite.exe aseprite.ini data
+          7z a -tzip $asset aseprite.exe aseprite.ini data *.dll
           if ($LASTEXITCODE -ne 0) { throw 'Failed to create portable ZIP' }
 
           "asset=$asset" >> $env:GITHUB_OUTPUT
